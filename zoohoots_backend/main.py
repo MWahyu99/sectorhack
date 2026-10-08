@@ -11,7 +11,10 @@ Jalankan production:
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 import logging
+import os
 
 from api.routes import router
 
@@ -31,16 +34,16 @@ app = FastAPI(
     redoc_url   = "/redoc",
 )
 
-# ── CORS (izinkan React frontend dari mana saja saat dev) ─────────────────────
+# ── CORS ──────────────────────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
-    allow_origins     = ["*"],   # ganti ke domain prod sebelum deploy
+    allow_origins     = ["*"],
     allow_credentials = True,
     allow_methods     = ["*"],
     allow_headers     = ["*"],
 )
 
-# ── Mount router ───────────────────────────────────────────────────────────────
+# ── Mount API router ───────────────────────────────────────────────────────────
 app.include_router(router)
 
 # ── Startup log ───────────────────────────────────────────────────────────────
@@ -48,3 +51,16 @@ app.include_router(router)
 async def on_startup():
     log.info("Zoohoots backend started.")
     log.info("Docs: http://localhost:8000/docs")
+
+# ── Serve React frontend (production) ─────────────────────────────────────────
+FRONTEND_BUILD = os.path.join(os.path.dirname(__file__), "..", "zoohoots_frontend", "dist")
+
+if os.path.exists(FRONTEND_BUILD):
+    # Serve static assets (JS, CSS, images)
+    app.mount("/assets", StaticFiles(directory=os.path.join(FRONTEND_BUILD, "assets")), name="assets")
+
+    # Catch-all: semua route non-API dikembalikan ke index.html (React Router)
+    @app.get("/{full_path:path}")
+    async def serve_frontend(full_path: str):
+        index = os.path.join(FRONTEND_BUILD, "index.html")
+        return FileResponse(index)
