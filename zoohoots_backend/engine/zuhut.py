@@ -75,9 +75,9 @@ _lib.core_sys_scan_all_f64.argtypes = [
 # ── Parameter default ZUHUT ──────────────────────────────────────────────────
 # Nilai ini bisa di-tune; untuk hackathon pakai baseline ini dulu.
 DEFAULT_TARGET_FASE         = 0.5    # midpoint phase target
-DEFAULT_TINGKAT_KEKUATAN    = 0.7    # kekuatan minimum yang diterima
-DEFAULT_TOLERANSI_PREFILTER = 0.15   # toleransi prefilter
-DEFAULT_AMBANG_BATAS        = 0.6    # ambang batas keputusan
+DEFAULT_TINGKAT_KEKUATAN    = 0.95    # kekuatan minimum yang diterima
+DEFAULT_TOLERANSI_PREFILTER = 0.10   # toleransi prefilter
+DEFAULT_AMBANG_BATAS        = 0.88    # ambang batas keputusan
 
 MAX_RESULTS = 2048  # buffer out_indices untuk scan_all
 
@@ -98,14 +98,17 @@ def _unp_score_from_count(n_matches: int, total_windows: int) -> float:
     return round(max(0.0, min(100.0, score)), 1)
 
 def _unp_label(score: float) -> str:
-    if score >= 80:
-        return "unprecedented"
-    elif score >= 55:
-        return "rare"
-    elif score >= 30:
-        return "uncommon"
-    else:
-        return "common"
+    if score >= 50:   return "unprecedented"
+    if score >= 38:   return "rare"
+    if score >= 25:   return "uncommon"
+    return "common"
+
+def _combo_verdict(unp_score: float, bias: str, confidence: float) -> str:
+    if unp_score >= 50 and bias == "buy"  and confidence >= 65: return "strong"
+    if unp_score >= 50 and bias == "sell" and confidence >= 65: return "caution"
+    if unp_score >= 38:                                          return "watch"
+    if unp_score >= 25:                                          return "normal"
+    return "skip"
 
 # ── L1 helper ────────────────────────────────────────────────────────────────
 def _l1_bias_from_index(index: int, features: np.ndarray) -> dict:
@@ -131,10 +134,10 @@ def _l1_bias_from_index(index: int, features: np.ndarray) -> dict:
         fwd = float(features[index + 1, 0]) - float(features[index, 0])
         # Normalisasi confidence berdasarkan magnitude
         abs_fwd = abs(fwd)
-        confidence = round(min(abs_fwd * 200, 99.9), 1)   # scale kasar
-        if fwd > 0.005:
+        confidence = round(min(abs_fwd * 1000, 99.9), 1)   # scale kasar
+        if fwd > 0.001:
             bias = "buy"
-        elif fwd < -0.005:
+        elif fwd < -0.001:
             bias = "sell"
         else:
             bias = "neutral"
@@ -265,13 +268,13 @@ def run_combined(features: np.ndarray, **kwargs) -> dict:
     bias       = l1["l1_bias"]
     confidence = l1["l1_confidence"]
 
-    if score >= 70 and bias == "buy" and confidence >= 65:
+    if score >= 50 and bias == "buy" and confidence >= 65:
         combo = "strong"
-    elif score >= 70 and bias == "sell" and confidence >= 65:
+    elif score >= 50 and bias == "sell" and confidence >= 65:
         combo = "caution"
-    elif score >= 70:
+    elif score >= 38:
         combo = "watch"
-    elif score >= 30:
+    elif score >= 25:
         combo = "normal"
     else:
         combo = "skip"

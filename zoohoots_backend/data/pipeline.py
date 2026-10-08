@@ -31,7 +31,7 @@ API_KEY  = os.getenv("SECTORS_API_KEY", "")
 BASE_URL = "https://api.sectors.app/v2"
 HEADERS  = {"Authorization": API_KEY}
 DB_PATH  = Path(__file__).parent / "zoohoots.db"
-RATE_DELAY = 0.35  # detik antar request (~3 req/s)
+RATE_DELAY = 2.00  # detik antar request (~3 req/s)
 
 log = logging.getLogger("pipeline")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -90,7 +90,7 @@ def _get(path: str, params: dict = None, retries: int = 3):
             if r.status_code == 200:
                 return r.json()
             elif r.status_code == 429:
-                wait = 2 ** attempt
+                wait = 5 * (2 ** attempt)
                 log.warning(f"Rate limit {url}, retry {wait}s")
                 time.sleep(wait)
             else:
@@ -291,13 +291,16 @@ def get_features(ticker: str, lookback_days: int = 400) -> Optional[np.ndarray]:
 
         hhi = bk["sum_sq_buy"] / (total_buy ** 2) if total_buy > 0 else 0.0
 
+        net_lot_total = bk["total_buy"] - bk["total_sell"]  # selalu 0 karena zero-sum, skip
+        buy_sell_ratio = bk["total_buy"] / (bk["total_sell"] + 1.0)  # rasio buy/sell
+
         rows_out.append([
-            close,
-            volume,
-            t5,
-            bk["max_abs_net"],
-            hhi,
-            top_share,          # ganti buy_dominance (konstan) → top broker share (bervariasi)
+            buy_sell_ratio,  # col 0 — pengganti close, dari broker data yg panjang
+            bk["max_abs_net"],   # col 1 — dominansi broker terbesar
+            t5,              # col 2
+            hhi,             # col 3
+            top_share,       # col 4
+            bk["total_buy"], # col 5 — volume aktivitas broker total
         ])
 
     arr = np.array(rows_out, dtype=np.float64)
